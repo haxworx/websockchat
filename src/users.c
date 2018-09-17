@@ -1,4 +1,5 @@
 #include "users.h"
+#include "commands.h"
 
 void
 users_add(hash_t *users, server_client_t *client)
@@ -15,6 +16,8 @@ users_add(hash_t *users, server_client_t *client)
    user->client->server = client->server;
 
    hash_add(users, key, user);
+
+   cmd_list_users(users, client);
 }
 
 void

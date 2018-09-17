@@ -265,15 +265,14 @@ cmd_register(hash_t *users, user_t *user, char *received)
    return FALSE;
 }
 
-static void
-cmd_list_users(hash_t *users, server_client_t *client, user_t *user)
+void
+cmd_list_users(hash_t *users, server_client_t *client)
 {
    user_t *u;
    char *json;
    void *tmp;
    char buf[1024];
-   int i = 0;
-   size_t len = 0;
+   size_t len;
    const char *key, *username = NULL;
 
    snprintf(buf, sizeof(buf), "{ \"users\": \n[\n");
@@ -299,7 +298,6 @@ cmd_list_users(hash_t *users, server_client_t *client, user_t *user)
         if (!tmp) exit(100);
         json = tmp;
         strcat(json, buf);
-        ++i;
      }
 
    snprintf(buf, sizeof(buf), "{ \"nick\": \"\" } \n]\n}");
@@ -318,7 +316,7 @@ cmd_list_users(hash_t *users, server_client_t *client, user_t *user)
 static bool
 cmd_message_broadcast(hash_t *users, user_t *user, char *received)
 {
-   const char *format = "%s says: %s\n";
+   const char *format = "%s says: %s\r\n";
    const char *key;
    char *message;
    int len;
@@ -376,14 +374,14 @@ cmd_parse(hash_t *users, server_client_t *client, char *received)
           {
              success = cmd_register(users, user, received);
              if (success)
-               cmd_list_users(users, client, user);
+               cmd_list_users(users, client);
           }
         else if (!strncasecmp(received, ":PASS", 5) &&
                  user->state != USER_STATE_AUTHENTICATED)
           {
              success = cmd_authenticate(user, received);
              if (success)
-               cmd_list_users(users, client, user);
+               cmd_list_users(users, client);
           }
         else if (!strncasecmp(received, ":NICK", 5) &&
                  user->state != USER_STATE_IDENTIFIED &&
@@ -397,7 +395,7 @@ cmd_parse(hash_t *users, server_client_t *client, char *received)
           }
         else if (!strncasecmp(received, "_USERS", 6))
           {
-             cmd_list_users(users, client, user);
+             cmd_list_users(users, client);
              return;
           }
         else if (!strncasecmp(received, ":QUIT", 5))
@@ -413,7 +411,8 @@ cmd_parse(hash_t *users, server_client_t *client, char *received)
                }
              else
                {
-                  success = cmd_message_broadcast(users, user, received);
+                  cmd_message_broadcast(users, user, received);
+                  return;
                }
           }
 
