@@ -163,8 +163,6 @@ credentials_add(const char *username, const char *password)
    char *sem_name = _ipc_sem_name_create("lock");
    sem_t *sem;
 
-   sem_unlink(sem_name);
-
 #if defined(__linux__)
    sem = sem_open(sem_name, O_CREAT | O_RDWR, 0644, 1);
 #else
