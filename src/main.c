@@ -22,6 +22,7 @@ _on_add_cb(server_event_t *event, void *data)
         users_add(users, event->client);
         printf("added client #%d origin: %s\n", server->socket_count - 1, address);
         free(address);
+        cmd_list_users_broadcast(users);
      }
 
    return 0;
@@ -75,6 +76,7 @@ _on_del_cb(server_event_t *event, void *data)
 
    server_client_write(event->client, goodbye, strlen(goodbye));
 
+   cmd_list_users_broadcast(users);
    users_del(users, event->client);
 
    return 0;

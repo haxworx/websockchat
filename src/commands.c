@@ -107,7 +107,7 @@ _cmd_help_send(user_t *user)
 {
    server_client_t *client;
    char desc[4096];
-   const char *request, *cmds = "/QUIT, /NICK, /PASS, /REGISTER, /MSG, /HELP.";
+   const char *cmds = "/QUIT, /NICK, /PASS, /REGISTER, /MSG, /HELP.";
 
    client = user->client;
 
@@ -165,7 +165,7 @@ _cmd_authenticate(hash_t *users, user_t *user)
              if (_auth_check(user->username, guess))
                {
                   user->state = USER_STATE_AUTHENTICATED;
-                  cmd_list_users(users, user);
+                  cmd_list_users_broadcast(users);
                   return TRUE;
                }
           }
@@ -204,7 +204,7 @@ _cmd_register(hash_t *users, user_t *user)
           {
              snprintf(user->username, sizeof(user->username), "%s", username);
              user->state = USER_STATE_AUTHENTICATED;
-             cmd_list_users(users, user);
+             cmd_list_users_broadcast(users);
              return TRUE;
           }
      }
@@ -220,7 +220,7 @@ cmd_list_users(hash_t *users, user_t *user)
    void *tmp;
    char buf[1024];
    size_t len;
-   const char *key, *username = NULL;
+   const char *username = NULL;
 
    snprintf(buf, sizeof(buf), "{ \"users\": \n[\n");
 
@@ -230,9 +230,11 @@ cmd_list_users(hash_t *users, user_t *user)
    json[0] = 0x00;
    strcat(json, buf);
 
-   while ((key = hash_key_next(users)) != NULL)
+   char **keys = hash_keys_get(users);
+
+   for (int i = 0; keys[i] != NULL; i++)
      {
-        u = hash_find(users, key);
+        u = hash_find(users, keys[i]);
         if (u->state == USER_STATE_AUTHENTICATED)
           username = u->username;
         else
@@ -247,6 +249,8 @@ cmd_list_users(hash_t *users, user_t *user)
         strcat(json, buf);
      }
 
+   hash_keys_free(keys);
+
    snprintf(buf, sizeof(buf), "{ \"nick\": \"\" } \n]\n}");
 
    len += strlen(buf) + 1;
@@ -260,11 +264,26 @@ cmd_list_users(hash_t *users, user_t *user)
    free(json);
 }
 
+void
+cmd_list_users_broadcast(hash_t *users)
+{
+   char **keys = hash_keys_get(users);
+
+   for (int i = 0; keys[i] != NULL; i++)
+     {
+        user_t *user = hash_find(users, keys[i]);
+        if (user)
+          cmd_list_users(users, user);
+     }
+
+   hash_keys_free(keys);
+}
+
 static BOOL
 _cmd_msg_broadcast(hash_t *users, user_t *user)
 {
    const char *format = "%s says: %s\r\n";
-   const char *key;
+   char **keys;
    char *message, *received;
    int len;
 
@@ -277,14 +296,18 @@ _cmd_msg_broadcast(hash_t *users, user_t *user)
 
    snprintf(message, len, format, user->username, received);
 
-   while ((key = hash_key_next(users)) != NULL)
+   keys = hash_keys_get(users);
+
+   for (int i = 0; keys[i] != NULL; i++)
      {
-        user_t *u = hash_find(users, key);
+        user_t *u = hash_find(users, keys[i]);
         if (u)
           {
              server_client_write(u->client, message, len);
           }
      }
+
+   hash_keys_free(keys);
 
    free(message);
 

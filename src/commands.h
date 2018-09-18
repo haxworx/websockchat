@@ -11,4 +11,7 @@ cmd_parse(hash_t *users, user_t *user);
 void
 cmd_list_users(hash_t *users, user_t *user);
 
+void
+cmd_list_users_broadcast(hash_t *users);
+
 #endif

@@ -18,8 +18,6 @@ users_add(hash_t *users, server_client_t *client)
    user->client->server = client->server;
 
    hash_add(users, key, user);
-
-   cmd_list_users(users, user);
 }
 
 void
@@ -35,19 +33,25 @@ users_del(hash_t *users, server_client_t *client)
         free(user->client);
         hash_del(users, key);
      }
+   cmd_list_users_broadcast(users);
 }
 
 bool
 user_exists(hash_t *users, const char *potential)
 {
-   const char *key;
+   char **keys = hash_keys_get(users);
 
-   while ((key = hash_key_next(users)) != NULL)
+   for (int i = 0; keys[i]; i++)
      {
-        user_t *tmp = hash_find(users, key);
+        user_t *tmp = hash_find(users, keys[i]);
         if (tmp->username && !strcasecmp(tmp->username, potential))
-          return true;
+          {
+             hash_keys_free(keys);
+             return true;
+          }
      }
+
+   hash_keys_free(keys);
 
    return false;
 }
@@ -67,16 +71,18 @@ user_by_client(hash_t *users, server_client_t *client)
 user_t *
 user_by_nick(hash_t *users, const char *nick)
 {
-   const char *key;
+   char **keys = hash_keys_get(users);
 
-   while ((key = hash_key_next(users)) != NULL)
+   for (int i = 0; keys[i]; i++)
      {
-        user_t *user = hash_find(users, key);
+        user_t *user = hash_find(users, keys[i]);
         if (user && !strcmp(user->username, nick))
           {
              return user;
           }
      }
+
+   hash_keys_free(keys);
 
    return NULL;
 }
