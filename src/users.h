@@ -20,6 +20,8 @@ struct user_t
    int              sock;
    char             username[128];
    server_client_t *client;
+
+   char      *received;
 };
 
 void
@@ -27,4 +29,15 @@ users_add(hash_t *users, server_client_t *client);
 
 void
 users_del(hash_t *users, server_client_t *client);
+
+user_t *
+user_by_client(hash_t *users, server_client_t *client);
+
+user_t *
+user_by_nick(hash_t *users, const char *nick);
+
+bool
+user_exists(hash_t *users, const char *potential);
+
+
 #endif

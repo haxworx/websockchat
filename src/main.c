@@ -31,6 +31,7 @@ static int
 _on_data_cb(server_event_t *event, void *data)
 {
    char *string;
+   user_t *user;
    server_data_t *received;
    hash_t *users = data;
 
@@ -40,7 +41,12 @@ _on_data_cb(server_event_t *event, void *data)
    memcpy(string, received->data, received->size);
    string[received->size] = 0x00;
 
-   cmd_parse(users, event->client, string);
+   user = user_by_client(users, event->client);
+   if (user)
+     {
+        user->received = string;
+        cmd_parse(users, user);
+     }
 
    free(string);
 
@@ -128,7 +134,7 @@ main(int argc, char **argv)
    server_event_callback_set(server, SERVER_EVENT_CALLBACK_ERR, _on_err_cb, users);
    server_event_callback_set(server, SERVER_EVENT_CALLBACK_DATA, _on_data_cb, users);
 
-   server_websocket_enabled_set(server, true);
+//   server_websocket_enabled_set(server, true);
 
    server_run(server);
 

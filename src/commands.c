@@ -6,11 +6,12 @@
 #include <sys/wait.h>
 #include <ctype.h>
 
+#define BOOL bool
 #define TRUE true
 #define FALSE false
 
 static int
-credentials_check(const char *username, char *guess)
+_auth_check(const char *username, char *guess)
 {
    FILE *p;
    struct sigaction newaction, oldaction;
@@ -44,7 +45,7 @@ credentials_check(const char *username, char *guess)
    return status;
 }
 
-static bool
+static BOOL
 _username_valid(const char *username)
 {
    int i;
@@ -65,32 +66,17 @@ _username_valid(const char *username)
    return TRUE;
 }
 
-static user_t *
-_user_from_nick(hash_t *users, const char *nick)
-{
-   const char *key;
-
-   while ((key = hash_key_next(users)) != NULL)
-     {
-        user_t *user = hash_find(users, key);
-        if (user && !strcmp(user->username, nick))
-          {
-             return user;
-          }
-     }
-
-   return NULL;
-}
-
-static bool
-cmd_message_send(hash_t *users, user_t *user, char *received)
+static BOOL
+_cmd_msg_send(hash_t *users, user_t *user)
 {
    const char *format = "%s privately says: %s\n";
-   char *to, *end, *msg, *message;
+   char *to, *end, *msg, *message, *received;
    int len;
 
    if (user->state != USER_STATE_AUTHENTICATED)
      return FALSE;
+
+   received = user->received;
 
    to = strchr(received, ' ') + 1;
    if (!to) return FALSE;
@@ -101,7 +87,7 @@ cmd_message_send(hash_t *users, user_t *user, char *received)
    msg = end + 1;
    if (!msg) return FALSE;
 
-   user_t *dest = _user_from_nick(users, to);
+   user_t *dest = user_by_nick(users, to);
    if (!dest) return FALSE;
 
    len = strlen(format) + strlen(user->username) + strlen(msg) + 1;
@@ -116,84 +102,32 @@ cmd_message_send(hash_t *users, user_t *user, char *received)
    return TRUE;
 }
 
-static bool
-cmd_help_send(server_client_t *client, char *received)
+static BOOL
+_cmd_help_send(user_t *user)
 {
+   server_client_t *client;
    char desc[4096];
    const char *request, *cmds = "/QUIT, /NICK, /PASS, /REGISTER, /MSG, /HELP.";
 
+   client = user->client;
+
    server_client_write(client, "\r\n", 2);
-
-   if (!received)
-     {
-        snprintf(desc, sizeof(desc), "available cmds: %s\r\n", cmds);
-        server_client_write(client, desc, strlen(desc));
-        return TRUE;
-     }
-
-   request = strchr(received, ' ');
-   if (!request || !request[0])
-     {
-        snprintf(desc, sizeof(desc), "available cmds: %s\r\n", cmds);
-        server_client_write(client, desc, strlen(desc));
-        return TRUE;
-     }
-
-   request += 1;
-
-   if (!strcasecmp(request, "NICK"))
-     {
-        snprintf(desc, sizeof(desc), "NICK: use desired username.\r\n");
-     }
-   else if (!strcasecmp(request, "PASS"))
-     {
-        snprintf(desc, sizeof(desc), "PASS: authenticate with password.\r\n");
-     }
-   else if (!strcasecmp(request, "REGISTER"))
-     {
-        snprintf(desc, sizeof(desc), "REGISTER \"nick\" \"pass\": register nickname.\r\n");
-     }
-   else if (!strcasecmp(request, "MSG"))
-     {
-        snprintf(desc, sizeof(desc), "MSG: send message to desired user.\r\n");
-     }
-   else if (!strcasecmp(request, "MOTD"))
-     {
-        snprintf(desc, sizeof(desc), "MOTD: view server's message of the day.\r\n");
-     }
-   else if (!strcasecmp(request, "QUIT"))
-     {
-        snprintf(desc, sizeof(desc), "QUIT: quit this session.\r\n");
-     }
-   else
-     {
-        return FALSE;
-     }
-
+   snprintf(desc, sizeof(desc), "available cmds: %s\r\n", cmds);
    server_client_write(client, desc, strlen(desc));
 
    return TRUE;
 }
 
-static bool
-clients_username_exists(hash_t *users, const char *potential)
+static BOOL
+_cmd_identify(hash_t *users, user_t *user)
 {
-   const char *key;
+   char *potential, *received;
 
-   while ((key = hash_key_next(users)) != NULL)
-     {
-        user_t *tmp = hash_find(users, key);
-        if (tmp->username && !strcasecmp(tmp->username, potential))
-          return TRUE;
-     }
+   if (!(user->state != USER_STATE_IDENTIFIED &&
+        user->state != USER_STATE_AUTHENTICATED))
+     return FALSE;
 
-   return FALSE;
-}
-
-static bool
-cmd_identify(hash_t *users, user_t *user, char *received)
-{
-   char *potential;
+   received = user->received;
 
    if (!strncasecmp(received, ":NICK ", 6))
      {
@@ -201,7 +135,7 @@ cmd_identify(hash_t *users, user_t *user, char *received)
         if (potential && potential[0])
           {
              if (_username_valid(potential) &&
-                 !clients_username_exists(users, potential))
+                 !user_exists(users, potential))
                {
                   snprintf(user->username, sizeof(user->username), "%s", potential);
                   user->state = USER_STATE_IDENTIFIED;
@@ -213,19 +147,25 @@ cmd_identify(hash_t *users, user_t *user, char *received)
    return FALSE;
 }
 
-static bool
-cmd_authenticate(user_t *user, char *received)
+static BOOL
+_cmd_authenticate(hash_t *users, user_t *user)
 {
-   char *guess;
+   char *guess, *received;
+
+   if (!(user->state != USER_STATE_AUTHENTICATED))
+     return FALSE;
+
+   received = user->received;
 
    if (!strncasecmp(received, ":PASS ", 6))
      {
         guess = strchr(received, ' ') + 1;
         if (guess && guess[0])
           {
-             if (credentials_check(user->username, guess))
+             if (_auth_check(user->username, guess))
                {
                   user->state = USER_STATE_AUTHENTICATED;
+                  cmd_list_users(users, user);
                   return TRUE;
                }
           }
@@ -234,11 +174,17 @@ cmd_authenticate(user_t *user, char *received)
    return FALSE;
 }
 
-static bool
-cmd_register(hash_t *users, user_t *user, char *received)
+static BOOL
+_cmd_register(hash_t *users, user_t *user)
 {
    const char *username, *password;
+   char *received;
    char buf[1024];
+
+   if (!(user->state != USER_STATE_IDENTIFIED &&
+       user->state != USER_STATE_AUTHENTICATED)) return false;
+
+   received = user->received;
 
    if (!strncasecmp(received, ":REGISTER ", 10))
      {
@@ -249,7 +195,7 @@ cmd_register(hash_t *users, user_t *user, char *received)
 
         password = delim + 1;
 
-        if (clients_username_exists(users, username) || !_username_valid(username))
+        if (user_exists(users, username) || !_username_valid(username))
           return FALSE;
 
         snprintf(buf, sizeof(buf), "./auth %s %s", username, password);
@@ -258,6 +204,7 @@ cmd_register(hash_t *users, user_t *user, char *received)
           {
              snprintf(user->username, sizeof(user->username), "%s", username);
              user->state = USER_STATE_AUTHENTICATED;
+             cmd_list_users(users, user);
              return TRUE;
           }
      }
@@ -266,7 +213,7 @@ cmd_register(hash_t *users, user_t *user, char *received)
 }
 
 void
-cmd_list_users(hash_t *users, server_client_t *client)
+cmd_list_users(hash_t *users, user_t *user)
 {
    user_t *u;
    char *json;
@@ -308,18 +255,20 @@ cmd_list_users(hash_t *users, server_client_t *client)
    json = tmp;
    strcat(json, buf);
 
-   server_client_write(client, json, strlen(json));
+   server_client_write(user->client, json, strlen(json));
 
    free(json);
 }
 
-static bool
-cmd_message_broadcast(hash_t *users, user_t *user, char *received)
+static BOOL
+_cmd_msg_broadcast(hash_t *users, user_t *user)
 {
    const char *format = "%s says: %s\r\n";
    const char *key;
-   char *message;
+   char *message, *received;
    int len;
+
+   received = user->received;
 
    if (!received || !received[0]) return FALSE;
 
@@ -343,82 +292,86 @@ cmd_message_broadcast(hash_t *users, user_t *user, char *received)
 }
 
 static void
-cmd_failure(server_client_t *client)
+_cmd_failure(user_t *user)
 {
-   server_client_write(client, "FAIL!\r\n", 7);
+   server_client_write(user->client, "FAIL!\r\n", 7);
 }
 
 static void
-cmd_success(server_client_t *client)
+_cmd_success(user_t *user)
 {
-   server_client_write(client, "OK!\r\n", 5);
+   server_client_write(user->client, "OK!\r\n", 5);
+}
+
+static void
+_trim(char *string)
+{
+   char *p = string;
+ 
+   while (*p)
+     {
+        if (*p == '\r' || *p == '\n')
+          {
+             *p = 0x00;
+             return;
+          }
+        p++;
+     }
 }
 
 void
-cmd_parse(hash_t *users, server_client_t *client, char *received)
+cmd_parse(hash_t *users, user_t *user)
 {
-   char key[128];
-   bool success = TRUE;
+   BOOL success = TRUE;
 
-   snprintf(key, sizeof(key), "%d", client->sock);
-   user_t *user = hash_find(users, key);
-   if (user)
+   if (!strncasecmp(user->received, ":QUIT", 5))
      {
-        if (!strncasecmp(received, ":HELP", 5))
-          { 
-             cmd_help_send(client, received);
-          }
-        else if (!strncasecmp(received, ":REGISTER ", 10) &&
-            user->state != USER_STATE_IDENTIFIED &&
-            user->state != USER_STATE_AUTHENTICATED)
+        server_client_del(user->client->server, user->client);
+        return;
+     }
+
+   _trim(user->received);
+
+   if (!strncasecmp(user->received, ":HELP", 5))
+     {
+        _cmd_help_send(user);
+     }
+   else if (!strncasecmp(user->received, ":REGISTER ", 10))
+     {
+        success = _cmd_register(users, user);
+     }
+   else if (!strncasecmp(user->received, ":PASS", 5))
+     {
+        success = _cmd_authenticate(users, user);
+     }
+   else if (!strncasecmp(user->received, ":NICK", 5))
+     {
+        success = _cmd_identify(users, user);
+     }
+   else if (!strncasecmp(user->received, ":MSG ", 5))
+     {
+        success = _cmd_msg_send(users, user);
+     }
+   else if (!strncasecmp(user->received, "_USERS", 6))
+     {
+        cmd_list_users(users, user);
+        return;
+     }
+   else
+     {
+        if (user->state != USER_STATE_AUTHENTICATED)
           {
-             success = cmd_register(users, user, received);
-             if (success)
-               cmd_list_users(users, client);
+             success = FALSE;
           }
-        else if (!strncasecmp(received, ":PASS", 5) &&
-                 user->state != USER_STATE_AUTHENTICATED)
+        else
           {
-             success = cmd_authenticate(user, received);
-             if (success)
-               cmd_list_users(users, client);
-          }
-        else if (!strncasecmp(received, ":NICK", 5) &&
-                 user->state != USER_STATE_IDENTIFIED &&
-                 user->state != USER_STATE_AUTHENTICATED)
-          {
-             success = cmd_identify(users, user, received);
-          }
-        else if (!strncasecmp(received, ":MSG ", 5))
-          {
-             success = cmd_message_send(users, user, received);
-          }
-        else if (!strncasecmp(received, "_USERS", 6))
-          {
-             cmd_list_users(users, client);
+             _cmd_msg_broadcast(users, user);
              return;
           }
-        else if (!strncasecmp(received, ":QUIT", 5))
-         {
-            server_client_del(client->server, client);
-            return;
-         }
-        else
-          {
-             if (user->state != USER_STATE_AUTHENTICATED)
-               {
-                  success = FALSE;
-               }
-             else
-               {
-                  cmd_message_broadcast(users, user, received);
-                  return;
-               }
-          }
-
-        if (success)
-          cmd_success(client);
-        else
-          cmd_failure(client);
      }
+
+   if (success)
+     _cmd_success(user);
+   else
+     _cmd_failure(user);
 }
