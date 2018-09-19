@@ -258,6 +258,9 @@ credentials_check(const char *username, char *guess)
    for (i = 0; i < count; i++)
      {
         user = known_users[i];
+        for (int j = 0; j < strlen(user->password); j++)
+          user->password[j] = 0x00;
+
         free(user->username);
         free(user->password);
         free(user);

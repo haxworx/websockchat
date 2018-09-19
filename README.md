@@ -1,6 +1,6 @@
-# WEBSOCKCHAT
+## WEBSOCKCHAT
 
-## ABOUT
+### ABOUT
 
 Simple implementation of a chat server using libsea.
 
@@ -18,7 +18,7 @@ Browsers do not like to serve unencrypted websockets over
 HTTP. Therefore with HTTPs you must use the wss:// protocol
 instead of the ws:// plain-text.
 
-## INSTALLATION
+### INSTALLATION
 
 After installing libsea:
 
