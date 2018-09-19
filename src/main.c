@@ -38,6 +38,12 @@ _on_data_cb(server_event_t *event, void *data)
 
    received = event->received;
 
+   if (received->size > 65535)
+     {
+        const char *message = "Get outta here!\r\n";
+        server_client_write(event->client, message, strlen(message));
+        server_client_del(event->server, event->client); return 0;
+     }
    string = malloc(received->size + 1);
    memcpy(string, received->data, received->size);
    string[received->size] = 0x00;
@@ -136,7 +142,7 @@ main(int argc, char **argv)
    server_event_callback_set(server, SERVER_EVENT_CALLBACK_ERR, _on_err_cb, users);
    server_event_callback_set(server, SERVER_EVENT_CALLBACK_DATA, _on_data_cb, users);
 
-//   server_websocket_enabled_set(server, true);
+   server_websocket_enabled_set(server, true);
 
    server_run(server);
 
