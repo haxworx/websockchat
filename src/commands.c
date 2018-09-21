@@ -375,11 +375,6 @@ cmd_parse(hash_t *users, user_t *user)
      {
         success = _cmd_msg_send(users, user);
      }
-   else if (!strncasecmp(user->received, "_USERS", 6))
-     {
-        cmd_list_users(users, user);
-        return;
-     }
    else
      {
         if (user->state != USER_STATE_AUTHENTICATED)

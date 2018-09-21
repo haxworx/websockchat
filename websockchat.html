@@ -121,7 +121,6 @@ section, header {
     var disconnect = document.getElementById("disconnect");
     var websocket = null;
     var wsUri = "ws://127.0.0.1:12345";
-    var stats_timer = null;
     var users = document.getElementById("users");
 
     if (window.WebSocket === undefined)
@@ -147,14 +146,6 @@ section, header {
         disconnect.disabled = true;
     }
 
-    function pollStats()
-    {
-       if (websocket.readyState != websocket.CLOSED)
-       {
-          websocket.send("_USERS");
-       }
-    }
-
     function Connect()
     {
         websocket = new WebSocket(wsUri);
@@ -166,7 +157,6 @@ section, header {
 
     function Disconnect()
     {
-       clearInterval(stats_timer);
        websocket.send(":QUIT");
        websocket.onclose = function() {};
        websocket.close();
@@ -181,7 +171,6 @@ section, header {
         state.innerHTML = "Connected to server";
         connect.disabled = true;
         disconnect.disabled = false;
-        tats_timer = setInterval(pollStats, 30000);
         // 20 seconds poll of users.
     }
 
