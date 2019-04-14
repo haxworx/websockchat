@@ -8,8 +8,6 @@ You can obtain from:
 
 https://github.com/haxworx/libsea
 
-Support for SSL/TLS.
-
 To ensure TLS, your certificates and keys must be valid. Also
 when connecting to the server via a Javascript websocket it's
 crucial to match the FQDN with that of the certificate.

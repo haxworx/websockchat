@@ -44,7 +44,7 @@ user_exists(hash_t *users, const char *potential)
    for (int i = 0; keys[i]; i++)
      {
         user_t *tmp = hash_find(users, keys[i]);
-        if (tmp->username && !strcasecmp(tmp->username, potential))
+        if (tmp && tmp->username[0] && !strcasecmp(tmp->username, potential))
           {
              hash_keys_free(keys);
              return true;
